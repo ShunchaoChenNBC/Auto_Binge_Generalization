@@ -64,9 +64,9 @@ Player_Event,
 Binge_Details,
 Video_Start_Type,
 device_name,
-regexp_replace(lower(Feeder_Video), r"[:,.&'!]", '') as Feeder_Video,
-Feeder_Video_Id,
-regexp_replace(lower(Display_Name), r"[:,.&'!]", '') as Display_Name,
+Lag(regexp_replace(Display_Name, r"[:,.&'!]", '')) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video, -- Slove N/a in feeder video
+Lag(video_id) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video_Id,
+regexp_replace(Display_Name, r"[:,.&'!]", '') as Display_Name,
 video_id,
 num_seconds_played_no_ads
 from(
@@ -76,18 +76,16 @@ adobe_date as Adobe_Date,
 TIMESTAMP_ADD(adobe_timestamp , INTERVAL -40 second) as Adobe_Timestamp,
 "" Player_Event,
 "" Binge_Details,
-case when lower(Display_Name) = "n/a" then lower(program) when lower(Display_Name) like '%trailer%' then 'Manual-Selection' else'Vdo_End' end as Video_Start_Type, -- replace N/a by program name, make all trailer ""
+case when lower(Display_Name) = "n/a" then lower(program) else lower(Display_Name) end as Display_Name, -- replace N/a by program name, 
+case when lower(Display_Name) like '%trailer%' then 'Manual-Selection' else'Vdo_End' end as Video_Start_Type, --make all trailer ""
 device_name,
-Lag(display_name) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video,
-Lag(video_id) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video_Id,
-display_name as Display_Name,
 video_id,
 num_seconds_played_no_ads
 FROM 
-`nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO`
+`nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
 where adobe_tracking_ID is not null 
 and adobe_date = current_date("America/New_York")-1
-and media_load = False and num_seconds_played_with_ads > 0)
+and media_load = False and num_seconds_played_with_ads > 0) as sv
 where Video_Start_Type is not null
 ),
 
