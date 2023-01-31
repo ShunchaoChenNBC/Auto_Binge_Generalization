@@ -9,7 +9,7 @@ WHERE post_evar56 is not null
 and post_cust_hit_time_gmt is not null 
 and post_evar7 is not null
 and post_evar7 not like "%display"
-and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = current_date("America/New_York")-1),
+and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York")= current_date("America/New_York")-1),
 
 cte as (select 
 Adobe_Tracking_ID,
@@ -53,7 +53,22 @@ else null end as Display_Name,
 "" video_id,
 null num_seconds_played_no_ads
 FROM Raw_Clicks)
-where Video_Start_Type is not null),
+where Video_Start_Type is not null and Display_Name is not null), -- slove the missing data issue
+
+click_Ready as (select 
+Adobe_Tracking_ID,
+Adobe_Date,
+Adobe_Timestamp,
+Player_Event,
+Binge_Details,
+Video_Start_Type,
+device_name,
+Lag(Display_Name) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video, -- clickstream add feeder video
+Feeder_Video_Id,
+Display_Name,
+video_id,
+num_seconds_played_no_ads
+from cte),
 
 cte1 as (
 select 
@@ -86,21 +101,22 @@ FROM
 where adobe_tracking_ID is not null 
 and adobe_date = current_date("America/New_York")-1
 and media_load = False and num_seconds_played_with_ads > 0) as sv
-where Video_Start_Type is not null
+where Video_Start_Type is not null and Display_Name is not null -- slove the missing data issue
 ),
 
 middle_table as (select *
-from cte
+from click_Ready
 union all
 select *
 from cte1),
+
 
 cte2 as (select b.*,
 sum(case when b.Feeder_Video = b.Display_Name then b.num_seconds_played_no_ads else 0 end) over (partition by Adobe_Tracking_ID, Adobe_Date, grp) as Episode_Time
 from
 (SELECT a.*,
 lag(Video_Start_Type) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) as Last_Actions,
-sum(case when Feeder_Video = Display_Name then 0 else 1 end) over (partition by Adobe_Tracking_ID, Adobe_Date order by Adobe_Timestamp) as grp
+sum(case when Feeder_Video = Display_Name then 0 else 1 end) over (partition by Adobe_Tracking_ID, Adobe_Date order by Adobe_Timestamp) as grp -- intermediate feature
 FROM 
 middle_table a) b),
 
