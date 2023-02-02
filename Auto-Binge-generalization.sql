@@ -9,7 +9,7 @@ WHERE post_evar56 is not null
 and post_cust_hit_time_gmt is not null 
 and post_evar7 is not null
 and post_evar7 not like "%display"
-and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York")= current_date("America/New_York")-1),
+and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") between "2023-01-23" and "2023-02-01"),
 
 cte as (select 
 Adobe_Tracking_ID,
@@ -63,14 +63,58 @@ Player_Event,
 Binge_Details,
 Video_Start_Type,
 device_name,
-Lag(Display_Name) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video, -- clickstream add feeder video
+Feeder_Video, -- keep the feeder video blank
 Feeder_Video_Id,
 Display_Name,
 video_id,
 num_seconds_played_no_ads
 from cte),
 
-cte1 as (
+-------- Mapping for epsiode to series, channel issues, and remove linear channels-------------------------
+
+
+sv_mapping as (
+select regexp_replace(lower(episode_title), r"[:,.&'!]", '') as Epsiodes, 
+case when length(display_name) <= 4 
+          or lower(display_name) like "%tv" 
+          or lower(display_name) like "%)" 
+          or lower(display_name) like "%-dt"
+          or lower(display_name) like "%premium"
+          or lower(display_name) in ('ktvh-dt','ksnv-dt','Kgwn.2') -- add extreme cases here
+          or regexp_contains(display_name, r"(W)[a-zA-Z0-9]+-[a-zA-Z0-9]")
+          or regexp_contains(display_name, r"(K)[a-zA-Z0-9]+-[a-zA-Z0-9]")
+          then null 
+          else regexp_replace(lower(display_name), r"[:,.&'!]", '') --clean series here
+          end as Series,-- remove platform names
+count (display_name) as Display_Time
+from `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO`
+where 1=1
+and episode_title is not null 
+and lower(episode_title) not in ('yellowstone',
+                                'quantum leap',
+                                'dateline nbc',
+                                'pft live',
+                                'americas got talent all stars') -- extend the list to fix the wrong raw data
+and adobe_date = current_date("America/New_York")-1
+group by 1,2
+),
+
+Mapping_Middle as (
+select Epsiodes, 
+Series,
+dense_rank() over (partition by Epsiodes order by Display_Time desc) as rk
+from sv_mapping
+where Series is not null and Series != "N/a" and Epsiodes is not null and Epsiodes != "n/a"
+order by 3 desc),
+
+Mapping as (
+select Epsiodes, 
+Series
+from Mapping_Middle
+where rk = 1 --- Only keep the highest value
+),
+
+Combinations as (
 select 
 Adobe_Tracking_ID,
 Adobe_Date,
@@ -79,12 +123,34 @@ Player_Event,
 Binge_Details,
 Video_Start_Type,
 device_name,
-Lag(regexp_replace(Display_Name, r"[:,.&'!]", '')) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video, -- Slove N/a in feeder video
-Lag(video_id) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video_Id,
-regexp_replace(Display_Name, r"[:,.&'!]", '') as Display_Name,
+Feeder_Video, 
+Feeder_Video_Id,
+case when m.Series is not null then m.Series else regexp_replace(lower(cr.Display_Name), r"[:,.&'!]", '') end as Display_Name,
 video_id,
 num_seconds_played_no_ads
-from(
+from click_Ready cr
+left join Mapping m on regexp_replace(lower(m.Epsiodes), r"[:,.&'!]", '') = regexp_replace(lower(cr.Display_Name), r"[:,.&'!]", '')
+),
+
+
+-----------------------------------------------------------------------------------
+
+
+SV as (
+select 
+Adobe_Tracking_ID,
+Adobe_Date,
+Adobe_Timestamp,
+Player_Event,
+Binge_Details,
+Video_Start_Type,
+device_name,
+Lag(Display_Name) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video, 
+Lag(video_id) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video_Id,
+Display_Name,
+video_id,
+num_seconds_played_no_ads
+FROM (
 SELECT
 adobe_tracking_id as Adobe_Tracking_ID,
 adobe_date as Adobe_Date,
@@ -99,16 +165,28 @@ num_seconds_played_no_ads
 FROM 
 `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
 where adobe_tracking_ID is not null 
-and adobe_date = current_date("America/New_York")-1
+and adobe_date between "2023-01-23" and "2023-02-01"
 and media_load = False and num_seconds_played_with_ads > 0) as sv
 where Video_Start_Type is not null and Display_Name is not null -- slove the missing data issue
 ),
 
 middle_table as (select *
-from click_Ready
+from Combinations
 union all
-select *
-from cte1),
+select 
+Adobe_Tracking_ID,
+Adobe_Date,
+Adobe_Timestamp,
+Player_Event,
+Binge_Details,
+Video_Start_Type,
+device_name,
+regexp_replace(lower(Feeder_Video), r"[:,.&'!]", '') as Feeder_Video,
+Feeder_Video_Id,
+regexp_replace(lower(Display_Name), r"[:,.&'!]", '') as Display_Name,
+video_id,
+num_seconds_played_no_ads
+from SV),
 
 
 cte2 as (select b.*,
@@ -118,8 +196,22 @@ from
 lag(Video_Start_Type) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) as Last_Actions,
 sum(case when Feeder_Video = Display_Name then 0 else 1 end) over (partition by Adobe_Tracking_ID, Adobe_Date order by Adobe_Timestamp) as grp -- intermediate feature
 FROM 
-middle_table a) b),
-
+middle_table a) b
+where  b.Display_Name in (select regexp_replace(lower(Display_Name), r"[:,.&'!]", '') as Display_Names --- Only Focus on the popular shows and remove linear channels 
+                          from
+                          (select 
+                          case when lower(display_name) = "n/a" then lower(program) else lower(display_name) end as Display_Name,
+                          count(distinct adobe_tracking_id) as Accounts
+                          FROM  `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
+                          where num_seconds_played_no_ads > 0 and adobe_date = current_date("America/New_York")-1
+                          group by 1) sv
+                          where Accounts >= 10000 and regexp_replace(lower(Display_Name), r"[:,.&'!]", '') not in (SELECT 
+                         regexp_replace(lower(content_channel), r"[:,.&'!]", '')
+                         FROM `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
+                         WHERE 1=1
+                         and adobe_date = current_date("America/New_York")-1
+                         and content_channel != "N/A"
+                         group by 1))),
 cte3 as 
 (select 
 Adobe_Tracking_ID,
@@ -150,15 +242,3 @@ order by 1,2,3)
 select *
 from cte3
 order by 1,2,3
-
--- select cte2.*,
--- sum(cte2.New_Watch_Time) over (partition by Adobe_Date) as Watch_Total
--- from 
--- (select 
--- Adobe_Date,
--- Video_Start_Type,
--- count(distinct Adobe_Tracking_ID) as Unique_Accounts,
--- round(sum(New_Watch_Time)/3600,2) as New_Watch_Time,
--- from cte1
--- group by 1,2) cte2
--- order by 1,2,4 desc
