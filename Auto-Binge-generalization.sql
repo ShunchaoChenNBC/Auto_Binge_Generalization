@@ -9,7 +9,7 @@ WHERE post_evar56 is not null
 and post_cust_hit_time_gmt is not null 
 and post_evar7 is not null
 and post_evar7 not like "%display"
-and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") between "2023-01-23" and "2023-02-01"),
+and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = current_date("America/New_York")-1),
 
 cte as (select 
 Adobe_Tracking_ID,
@@ -108,10 +108,11 @@ where Series is not null and Series != "N/a" and Epsiodes is not null and Epsiod
 order by 3 desc),
 
 Mapping as (
-select Epsiodes, 
+select regexp_replace(lower(Epsiodes), r"[:,.&'!]", '') as Epsiodes, 
 Series
 from Mapping_Middle
 where rk = 1 --- Only keep the highest value
+and regexp_replace(lower(Epsiodes), r"[:,.&'!]", '')  not in ("poker face") -- Exclude the cases (Series Name are the sames as Epsiode Names)
 ),
 
 Combinations as (
@@ -129,7 +130,7 @@ case when m.Series is not null then m.Series else regexp_replace(lower(cr.Displa
 video_id,
 num_seconds_played_no_ads
 from click_Ready cr
-left join Mapping m on regexp_replace(lower(m.Epsiodes), r"[:,.&'!]", '') = regexp_replace(lower(cr.Display_Name), r"[:,.&'!]", '')
+left join Mapping m on m.Epsiodes = regexp_replace(lower(cr.Display_Name), r"[:,.&'!]", '')
 ),
 
 
@@ -165,7 +166,7 @@ num_seconds_played_no_ads
 FROM 
 `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
 where adobe_tracking_ID is not null 
-and adobe_date between "2023-01-23" and "2023-02-01"
+and adobe_date  = current_date("America/New_York")-1
 and media_load = False and num_seconds_played_with_ads > 0) as sv
 where Video_Start_Type is not null and Display_Name is not null -- slove the missing data issue
 ),
