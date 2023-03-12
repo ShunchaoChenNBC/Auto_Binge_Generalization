@@ -6,6 +6,7 @@ DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") AS Adobe_Date,
 DATETIME(timestamp(post_cust_hit_time_gmt), "America/New_York") AS Adobe_Timestamp,
 post_evar19 as Player_Event,
 post_evar7 as Binge_Details,
+post_evar37 as device_name, -- Device_Info from Clickstream
 SPLIT(post_prop47, '|')[SAFE_OFFSET(0)] as Binge_Type -- capture SLE
 FROM `nbcu-ds-prod-001.feed.adobe_clickstream` 
 WHERE post_evar56 is not null
@@ -43,7 +44,7 @@ case when Binge_Details like "%Series-cue-up%auto-play" then "Auto-Play"  -- Onl
      when Binge_Details like '%deeplink%' then "Manual-Selection"
      when Binge_Details like 'rail%click'then "Manual-Selection" 
 else null end as Video_Start_Type,
-"" device_name,
+device_name,
 "" Feeder_Video,
 "" Feeder_Video_Id,
 case when Player_Event like "%:episodes:%" and Binge_Details is not null then REGEXP_REPLACE(Player_Event, r'peacock:details:episodes:', '')
