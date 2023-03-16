@@ -1,4 +1,5 @@
-create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Ad_Hoc.Auto_Binge_Metadata_V4_Test` as
+
+create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Ad_Hoc.Auto_Binge_Miscredit_Test` as
 
 with Raw_Clicks as (SELECT
 post_evar56 as Adobe_Tracking_ID, 
@@ -9,11 +10,11 @@ post_evar7 as Binge_Details,
 post_evar37 as device_name, -- Device_Info from Clickstream
 SPLIT(post_prop47, '|')[SAFE_OFFSET(0)] as Binge_Type -- capture SLE
 FROM `nbcu-ds-prod-001.feed.adobe_clickstream` 
-WHERE post_evar56 is not null
+WHERE post_evar56 = "++0SvS/n/CJ8ejcPCnpQqEOKtiA0XgTY07YzOgnTeuk="
 and post_cust_hit_time_gmt is not null 
 and post_evar7 is not null
 and post_evar7 not like "%display"
-and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") between "2023-01-26" and "2023-03-01"),
+and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = "2023-02-24"),
 
 cte as (select 
 Adobe_Tracking_ID,
@@ -37,7 +38,8 @@ Adobe_Timestamp,
 Player_Event,
 Binge_Details,
 Binge_Type,
-case when Binge_Details like "%Series-cue-up%auto-play" then "Auto-Play"  -- Only care about series cue up, remove episode-cue-up
+case when Binge_Details like "%Series-cue-up%auto-play" then "Auto-Play" -- series binge
+     when Binge_Details like "%Programme-cue-up%auto-play"  then "Auto-Play"  -- movies binge
      when Binge_Details like '%cue%up%click' then "Clicked-Up-Next" 
      when Binge_Details like "%dismiss" then "Dismiss" 
      when Player_Event like "%details:%" and Binge_Details is not null then "Manual-Selection"
@@ -141,9 +143,7 @@ from click_Ready cr
 left join Mapping m on m.Epsiodes = regexp_replace(lower(cr.Display_Name), r"[:,.&'!]", '')
 ),
 
-
 -----------------------------------------------------------------------------------
-
 
 SV as (
 select 
@@ -175,8 +175,8 @@ video_id,
 num_seconds_played_no_ads
 FROM 
 `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
-where adobe_tracking_ID is not null 
-and adobe_date between "2023-01-26" and "2023-03-01" 
+where adobe_tracking_ID = "++0SvS/n/CJ8ejcPCnpQqEOKtiA0XgTY07YzOgnTeuk="
+and adobe_date = "2023-02-24" 
 and media_load = False and num_seconds_played_with_ads > 0) as sv
 where Video_Start_Type is not null and Display_Name is not null -- slove the missing data issue
 ),
@@ -202,7 +202,7 @@ from SV),
 
 
 cte2 as (select b.*,
-sum(case when b.Feeder_Video = b.Display_Name then b.num_seconds_played_no_ads else 0 end) over (partition by Adobe_Tracking_ID, Adobe_Date, grp) as Episode_Time
+sum(case when b.Feeder_Video = b.Display_Name then b.num_seconds_played_no_ads else 0 end) over (partition by Adobe_Tracking_ID, Adobe_Date, grp) as Episode_Time -- roll-over sum up
 from
 (SELECT a.*,
 lag(Video_Start_Type) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) as Last_Actions,
@@ -219,16 +219,16 @@ Player_Event,
 Binge_Details,
 Binge_Type,
 Last_Actions,
-case when Feeder_Video is null and num_seconds_played_no_ads is not null then "Manual-Selection" 
+case when (Feeder_Video is null or Feeder_Video = "") and num_seconds_played_no_ads is not null then "Manual-Selection" 
 when Feeder_Video like '%trailer%' then "Manual-Selection" -- all trailers are manual
 when Last_Actions like '%Manual%' and Video_Start_Type = 'Vdo_End' then "Manual-Selection"
-when Last_Actions = 'Auto-Play' and Video_Start_Type = 'Vdo_End'and Feeder_Video not like "%trailer%" then "Auto-Play" 
+when Last_Actions = 'Auto-Play' and Video_Start_Type = 'Vdo_End'and Feeder_Video not like "%trailer%" and (Feeder_Video != Display_Name) then "Auto-Play" -- must a feeder and Feeder <> Display Name
 when Last_Actions = 'Clicked-Up-Next' and Video_Start_Type = 'Vdo_End'and Feeder_Video not like "%trailer%" then "Clicked-Up-Next" 
 when Feeder_Video <> Display_Name and Episode_Time > 0 and num_seconds_played_no_ads is not null then "Auto-Play"-- episode attribution
 when Feeder_Video <> Display_Name and Feeder_Video != "" and Episode_Time = 0 and num_seconds_played_no_ads <= 30 then "Auto-Play"--only watch one show and watch less than 30s
 when Feeder_Video <> Display_Name and Feeder_Video != "" and Episode_Time = 0 and num_seconds_played_no_ads > 30 then "Unattributed" -- only watch one show and watch more than 30s
 when Video_Start_Type = "Auto-Play" and (Feeder_Video is null or Feeder_Video = "") then "Manual-Selection" -- if cue-up auto but no feeder videos put it to Manual-Selection
-else Video_Start_Type
+else "Manual-Selection"
 end as Video_Start_Type,
 device_name,
 Feeder_Video,
@@ -236,13 +236,50 @@ Feeder_Video_Id,
 Display_Name,
 video_id,
 num_seconds_played_no_ads,
+grp, -- for test
+Episode_Time, -- for test
 case when (Feeder_Video is null 
+or Feeder_Video = ""
 or Feeder_Video <> Display_Name)
-and (Last_Actions != "Clicked-Up-Next" or Video_Start_Type !=  "Clicked-Up-Next") -- Solve the double count issue in Click-Up-Next
-then ifnull(num_seconds_played_no_ads,0) + Episode_Time else 0 end as New_Watch_Time
+and (Display_Name = lead(Display_Name) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) 
+and lead(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) = lead(Display_Name) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp)) -- get rid of mis-match
+then ifnull(num_seconds_played_no_ads,0) + Episode_Time 
+when (Last_Actions != "Clicked-Up-Next" or Video_Start_Type !=  "Clicked-Up-Next")  -- solve double click
+and (lag(Last_Actions) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) != "Clicked-Up-Next" 
+or lag(Video_Start_Type) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) != "Clicked-Up-Next" ) -- Solve the double count in Click-Up-Next Step 2: "clikc-up-next not consecutive
+then 0
+else 0 end as New_Watch_Time_01,
+case when LAG(Display_Name) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) != Display_Name 
+and (LAG(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) is null or LAG(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) = "")
+then Episode_Time else 0 end as New_Watch_Time_02 
 from cte2
 order by 1,2,3)
 
-select *
+select 
+Adobe_Tracking_ID,
+Adobe_Date,
+Adobe_Timestamp,
+Player_Event,
+Binge_Details,
+Binge_Type,
+Last_Actions,
+Video_Start_Type,
+device_name,
+Feeder_Video,
+Feeder_Video_Id,
+Display_Name,
+video_id,
+num_seconds_played_no_ads,
+grp, -- for test
+Episode_Time, -- for test
+New_Watch_Time_01,
+New_Watch_Time_02,
+New_Watch_Time_01 + New_Watch_Time_02 as New_Watch_Time
 from cte3
 order by 1,2,3
+
+
+
+
+
+
