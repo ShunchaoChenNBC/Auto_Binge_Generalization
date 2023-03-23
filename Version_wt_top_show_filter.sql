@@ -1,4 +1,4 @@
-create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Ad_Hoc.Auto_Binge_Case_06` as
+create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Ad_Hoc.Auto_Binge_Case_09` as
 
 with Raw_Clicks as (SELECT
 post_evar56 as Adobe_Tracking_ID, 
@@ -9,11 +9,11 @@ post_evar7 as Binge_Details,
 post_evar37 as device_name, -- Device_Info from Clickstream
 SPLIT(post_prop47, '|')[SAFE_OFFSET(0)] as Binge_Type -- capture SLE
 FROM `nbcu-ds-prod-001.feed.adobe_clickstream` 
-WHERE post_evar56  = "+++DPkBHuBfqGsHeigoczGdmJYP7/FREV8cU/4Kdqvc="
+WHERE post_evar56  = "++0SvS/n/CJ8ejcPCnpQqEOKtiA0XgTY07YzOgnTeuk="
 and post_cust_hit_time_gmt is not null 
 and post_evar7 is not null
 and post_evar7 not like "%display"
-and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = "2023-01-31"),
+and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = "2023-02-24"),
 
 cte as (select 
 Adobe_Tracking_ID,
@@ -176,8 +176,8 @@ video_id,
 num_seconds_played_no_ads
 FROM 
 `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
-where adobe_tracking_ID  =  "+++DPkBHuBfqGsHeigoczGdmJYP7/FREV8cU/4Kdqvc="
-and adobe_date = "2023-01-31" 
+where adobe_tracking_ID  = "++0SvS/n/CJ8ejcPCnpQqEOKtiA0XgTY07YzOgnTeuk="
+and adobe_date = "2023-02-24" 
 and media_load = False and num_seconds_played_with_ads > 0) as sv
 where Video_Start_Type is not null and Display_Name is not null -- slove the missing data issue
 ),
@@ -281,6 +281,7 @@ select cte4.*,
 New_Watch_Time_01+New_Watch_Time_02 as Final_Watch_Time 
 from cte4
 order by 1,2,3
+
 
 
 
