@@ -1,5 +1,4 @@
-
-create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Ad_Hoc.Auto_Binge_Miscredit_Test` as
+create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Ad_Hoc.Auto_Binge_Case_06` as
 
 with Raw_Clicks as (SELECT
 post_evar56 as Adobe_Tracking_ID, 
@@ -10,11 +9,11 @@ post_evar7 as Binge_Details,
 post_evar37 as device_name, -- Device_Info from Clickstream
 SPLIT(post_prop47, '|')[SAFE_OFFSET(0)] as Binge_Type -- capture SLE
 FROM `nbcu-ds-prod-001.feed.adobe_clickstream` 
-WHERE post_evar56 = "++0SvS/n/CJ8ejcPCnpQqEOKtiA0XgTY07YzOgnTeuk="
+WHERE post_evar56  = "+++DPkBHuBfqGsHeigoczGdmJYP7/FREV8cU/4Kdqvc="
 and post_cust_hit_time_gmt is not null 
 and post_evar7 is not null
 and post_evar7 not like "%display"
-and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = "2023-02-24"),
+and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = "2023-01-31"),
 
 cte as (select 
 Adobe_Tracking_ID,
@@ -143,7 +142,9 @@ from click_Ready cr
 left join Mapping m on m.Epsiodes = regexp_replace(lower(cr.Display_Name), r"[:,.&'!]", '')
 ),
 
+
 -----------------------------------------------------------------------------------
+
 
 SV as (
 select 
@@ -175,8 +176,8 @@ video_id,
 num_seconds_played_no_ads
 FROM 
 `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
-where adobe_tracking_ID = "++0SvS/n/CJ8ejcPCnpQqEOKtiA0XgTY07YzOgnTeuk="
-and adobe_date = "2023-02-24" 
+where adobe_tracking_ID  =  "+++DPkBHuBfqGsHeigoczGdmJYP7/FREV8cU/4Kdqvc="
+and adobe_date = "2023-01-31" 
 and media_load = False and num_seconds_played_with_ads > 0) as sv
 where Video_Start_Type is not null and Display_Name is not null -- slove the missing data issue
 ),
@@ -238,24 +239,19 @@ video_id,
 num_seconds_played_no_ads,
 grp, -- for test
 Episode_Time, -- for test
-case when (Feeder_Video is null 
+case when 
+Feeder_Video is null 
 or Feeder_Video = ""
-or Feeder_Video <> Display_Name)
-and (Display_Name = lead(Display_Name) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) 
-and lead(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) = lead(Display_Name) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp)) -- get rid of mis-match
+or Feeder_Video <> Display_Name
 then ifnull(num_seconds_played_no_ads,0) + Episode_Time 
-when (Last_Actions != "Clicked-Up-Next" or Video_Start_Type !=  "Clicked-Up-Next")  -- solve double click
-and (lag(Last_Actions) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) != "Clicked-Up-Next" 
-or lag(Video_Start_Type) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) != "Clicked-Up-Next" ) -- Solve the double count in Click-Up-Next Step 2: "clikc-up-next not consecutive
-then 0
 else 0 end as New_Watch_Time_01,
 case when LAG(Display_Name) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) != Display_Name 
-and (LAG(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) is null or LAG(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) = "")
-then Episode_Time else 0 end as New_Watch_Time_02 
+and (LAG(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) is null or LAG(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) = "") 
+then Episode_Time else 0 end as New_Watch_Time_02 --if record not match, then assign time to here
 from cte2
-order by 1,2,3)
+order by 1,2,3),
 
-select 
+cte4 as (select 
 Adobe_Tracking_ID,
 Adobe_Date,
 Adobe_Timestamp,
@@ -272,12 +268,19 @@ video_id,
 num_seconds_played_no_ads,
 grp, -- for test
 Episode_Time, -- for test
-New_Watch_Time_01,
-New_Watch_Time_02,
-New_Watch_Time_01 + New_Watch_Time_02 as New_Watch_Time
-from cte3
-order by 1,2,3
+case when (Feeder_Video = "" and lead(Feeder_Video) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) = "") 
+or ( Display_Name != lead(Display_Name) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) and num_seconds_played_no_ads is null)
+then 0 else New_Watch_Time_01 end as New_Watch_Time_01,
+-- when Display_Name != lead(Display_Name) over (partition by Adobe_Tracking_ID,adobe_date order by adobe_timestamp) and num_seconds_played_no_ads is null
+-- then 0-- if the previous value not match current value, then 0
+-- else New_Watch_Time_01 end as New_Watch_Time_01, -- Remove duplicated clicks
+New_Watch_Time_02
+from cte3)
 
+select cte4.*,
+New_Watch_Time_01+New_Watch_Time_02 as Final_Watch_Time 
+from cte4
+order by 1,2,3
 
 
 
