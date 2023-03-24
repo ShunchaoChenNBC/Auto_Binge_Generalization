@@ -37,8 +37,8 @@ Adobe_Timestamp,
 Player_Event,
 Binge_Details,
 Binge_Type,
-case when Binge_Details like "%Series-cue-up%auto-play" then "Auto-Play" -- series binge
-     when Binge_Details like "%Programme-cue-up%auto-play" then "Auto-Play"  -- movies binge
+case when Binge_Details like "%Series-cue-up%auto-play" then "Auto-Play" -- series binge not epsiode cue up
+     when Binge_Details like "%Programme-cue-up%auto-play" then "Auto-Play"  -- movies binge 
      when Binge_Details like '%cue%up%click' then "Clicked-Up-Next" 
      when Binge_Details like "%dismiss" then "Dismiss" 
      when Player_Event like "%details:%" and Binge_Details is not null then "Manual-Selection"
