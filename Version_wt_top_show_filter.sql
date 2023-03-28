@@ -1,4 +1,4 @@
-create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Ad_Hoc.Auto_Binge_All_Test_0224` as
+create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Sandbox_Final.Auto_Binge_Metadata` as
 
 with Raw_Clicks as (SELECT
 post_evar56 as Adobe_Tracking_ID, 
@@ -13,7 +13,7 @@ WHERE post_evar56 is not null
 and post_cust_hit_time_gmt is not null 
 and post_evar7 is not null
 and post_evar7 not like "%display"
-and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = "2023-02-24"),
+and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") between "2023-01-01" and "2023-03-16"),
 
 cte as (select 
 Adobe_Tracking_ID,
@@ -88,7 +88,7 @@ case when length(display_name) <= 4
           or lower(display_name) like "%)" 
           or lower(display_name) like "%-dt"
           or lower(display_name) like "%premium"
-          or lower(display_name) in ('ktvh-dt','ksnv-dt','Kgwn.2') -- add extreme cases here
+          or lower(display_name) in ('ktvh-dt','ksnv-dt','Kgwn.2','kgwn2') -- add extreme cases here
           or regexp_contains(display_name, r"(W)[a-zA-Z0-9]+-[a-zA-Z0-9]")
           or regexp_contains(display_name, r"(K)[a-zA-Z0-9]+-[a-zA-Z0-9]")
           then null 
@@ -177,7 +177,7 @@ num_seconds_played_no_ads
 FROM 
 `nbcu-ds-prod-001.PeacockDataMartSilver.SILVER_VIDEO` 
 where adobe_tracking_ID  is not null
-and adobe_date = "2023-02-24" 
+and adobe_date between "2023-01-01" and "2023-03-16"
 and media_load = False and num_seconds_played_with_ads > 0) as sv
 where Video_Start_Type is not null and Display_Name is not null -- slove the missing data issue
 ),
@@ -226,7 +226,6 @@ when Last_Actions like '%Manual%' and Video_Start_Type = 'Vdo_End' then "Manual-
 when Last_Actions = 'Auto-Play' and Video_Start_Type = 'Vdo_End'and Feeder_Video not like "%trailer%" and (Feeder_Video != Display_Name) then "Auto-Play" -- must a feeder and Feeder <> Display Name
 when Last_Actions = 'Clicked-Up-Next' and Video_Start_Type = 'Vdo_End'and Feeder_Video not like "%trailer%" then "Clicked-Up-Next" 
 when Feeder_Video <> Display_Name and Episode_Time > 0 and num_seconds_played_no_ads is not null then "Auto-Play"-- episode attribution
-when Feeder_Video <> Display_Name and Feeder_Video != "" and Episode_Time = 0 and num_seconds_played_no_ads <= 30 then "Auto-Play"--only watch one show and watch less than 30s
 when Feeder_Video <> Display_Name and Feeder_Video != "" and Episode_Time = 0 and num_seconds_played_no_ads > 30 then "Unattributed" -- only watch one show and watch more than 30s
 when Video_Start_Type = "Auto-Play" and (Feeder_Video is null or Feeder_Video = "") then "Manual-Selection" -- if cue-up auto but no feeder videos put it to Manual-Selection
 else "Manual-Selection"
@@ -281,7 +280,7 @@ New_Watch_Time_01+New_Watch_Time_02 as Final_Watch_Time
 from cte4
 order by 1,2,3
 
-
+-- when Feeder_Video <> Display_Name and Feeder_Video != "" and Episode_Time = 0 and num_seconds_played_no_ads <= 30 then "Auto-Play"--only watch one show and watch less than 30s
 
 
 
