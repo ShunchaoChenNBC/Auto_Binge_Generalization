@@ -1,14 +1,14 @@
 # Auto_Binge_Generalization
 
 **Auto-Play Logic:**
-<br />a.Clickstream records the title as “Auto-Play”
-<br />b.Sliver video records the same title at the same time and the timestamp of that title in SV is next to the timestamp in Clickstream
-<br />c.Watch more than one episode (The same title occurs consecutively >=2)
-<br />d.Must has feeder video and the feeder video is not any trailer
+<br /> • Clickstream records the title as “Auto-Play”
+<br /> • Sliver video records the same title at the same time and the timestamp of that title in SV is next to the timestamp in Clickstream
+<br /> • Watch more than one episode (The same title occurs consecutively >=2)
+<br /> • Must has feeder video and the feeder video is not any trailer
 
 **Manual Selection Logic:**
-1. Clickstream captured “click” in cue-up
-2. No feeder video recorded
+<br /> • Clickstream captured “click” in cue-up
+<br /> • No feeder video recorded
 
 **Notes:**
 
