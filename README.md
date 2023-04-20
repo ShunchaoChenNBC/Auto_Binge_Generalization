@@ -10,7 +10,7 @@
 1. Clickstream captured “click” in cue-up
 2. No feeder video recorded
 
-Notes:
+**Notes:**
 •	“New Watch Time” was replaced by “Final Watch Time”, which would be used for getting watching hours.
 •	the time range started from “2023-01-01” and would be updated daily.
 •	Columns “gre” and “Episode_Time” are intermediate columns that can be ignored in daily usage.
