@@ -1,4 +1,4 @@
-create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Sandbox_Final.Auto_Binge_Metadata_Beta_V2` as
+create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Sandbox_Final.Auto_Binge_Metadata_Prod` as
 
 with Raw_Clicks as (SELECT
 post_evar56 as Adobe_Tracking_ID, 
