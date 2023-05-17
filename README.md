@@ -7,11 +7,11 @@
 <br /> • The video must have a feeder, and the feeder video should not be a trailer.
 
 2. Logic 2:
-<br /> • Continously watch more than one episode (The same title occurs consecutively >=2)
-<br /> • Must has feeder video and the feeder video is not any trailer
+<br /> • Continously watch more than one episode (The same title occurs consecutively >=2).
+<br /> • Must has feeder video and the feeder video is not any trailer.
 
 **Manual Selection Logic:**
-<br /> • Clickstream captured “click” in cue-up
+<br /> • Clickstream captured “click” related actions in cue-up
 <br /> • No feeder video recorded
 
 **Notes:**
