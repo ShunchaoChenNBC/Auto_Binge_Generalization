@@ -1,3 +1,5 @@
+--- Delete the old incorrect records, for example: 
+DELETE FROM `nbcu-ds-sandbox-a-001.Shunchao_Sandbox_Final.Auto_Binge_Metadata_Prod` where Adobe_Date = "2023-08-05"
 
 create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Sandbox_Final.Auto_Binge_Metadata_Prod` as
 
