@@ -10,6 +10,10 @@
 <br /> • Continously watch more than one episode (The same title occurs consecutively >=2).
 <br /> • Must has feeder video and the feeder video is not any trailer.
 
+3. WIP:
+<br /> • capturing SLE signs like "sle-binge|player||sle-binge-auto|click" or the converted information "sle-binge" in Binge_Type new feature.
+
+
 **Manual Selection Logic:**
 <br /> • Clickstream captured “click” related actions in cue-up
 <br /> • No feeder video recorded
