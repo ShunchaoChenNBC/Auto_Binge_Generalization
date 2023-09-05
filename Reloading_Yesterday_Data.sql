@@ -1,7 +1,9 @@
 --- Delete the old incorrect records, for example: 
 DELETE FROM `nbcu-ds-sandbox-a-001.Shunchao_Sandbox_Final.Auto_Binge_Metadata_Prod` where Adobe_Date = "2023-08-05"
 
-create or replace table `nbcu-ds-sandbox-a-001.Shunchao_Sandbox_Final.Auto_Binge_Metadata_Prod` as
+
+
+
 
 
 with Raw_Clicks as (SELECT
@@ -9,14 +11,18 @@ post_evar56 as Adobe_Tracking_ID,
 DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") AS Adobe_Date,
 DATETIME(timestamp(post_cust_hit_time_gmt), "America/New_York") AS Adobe_Timestamp,
 post_evar19 as Player_Event,
-post_evar7 as Binge_Details,
-post_evar37 as device_name, -- Device_Info from Clickstream
+lower(post_evar7) as Binge_Details, -- lower to make sure parsing work
+CASE 
+when LOWER(post_evar106)= 'chromecast' AND LOWER(post_evar37) = 'Chromecast Receiver App' then 'Chromecast Receiver App'
+when LOWER(post_evar37) like '%xbox%' then 'xbox'
+when LOWER(post_evar37) ='ps4' then 'playstation'
+ELSE LOWER(post_evar37) end as device_name, -- Device_Info from Clickstream
 SPLIT(post_prop47, '|')[SAFE_OFFSET(0)] as Binge_Type -- capture SLE
 FROM `nbcu-ds-prod-001.feed.adobe_clickstream` 
 WHERE post_evar56 is not null
 and post_cust_hit_time_gmt is not null 
 and post_evar7 is not null
-and post_evar7 not like "%display"
+and post_evar7 not like "%display%"
 and lower(post_evar7) not like "%episode%cue%up%" -- make sure no episode cue up 
 and DATE(timestamp(post_cust_hit_time_gmt), "America/New_York") = current_date("America/New_York")-1),
 
@@ -42,14 +48,14 @@ Adobe_Timestamp,
 Player_Event,
 Binge_Details,
 Binge_Type,
-case when Binge_Details like "%Series-cue-up%auto-play" then "Auto-Play" -- series binge not epsiode cue up
-     when Binge_Details like "%Programme-cue-up%auto-play" then "Auto-Play"  -- movies binge 
-     when Binge_Details like '%Series-cue-up%click' then "Clicked-Up-Next" --- series Click-up-next not epsiode cue up
-     when Binge_Details like '%Programme-cue-up%click' then "Clicked-Up-Next" --- movies Click-up-next not epsiode cue up
-     when Binge_Details like "%dismiss" then "Dismiss" 
+case when Binge_Details like "%series%cue%up%auto%play%" then "Auto-Play" -- series binge not epsiode cue up
+     when lower(Binge_Type) like "%sle%binge%" then "Auto-Play" -- also include SLE
+     when Binge_Details like "%programme%cue%up%auto%play%" then "Auto-Play"  -- movies binge 
+     when Binge_Details like '%series%cue%up%click%' then "Clicked-Up-Next" --- series Click-up-next not epsiode cue up
+     when Binge_Details like '%programme%cue%up%click%' then "Clicked-Up-Next" --- movies Click-up-next not epsiode cue up
      when Player_Event like "%details:%" and Binge_Details is not null then "Manual-Selection"
      when Binge_Details like '%deeplink%' then "Manual-Selection" ---Deep Link
-     when Binge_Details like 'rail%click'then "Manual-Selection" --Rail Click
+     when Binge_Details like '%rail%click%'then "Manual-Selection" --Rail Click
 else null end as Video_Start_Type,
 device_name,
 "" Feeder_Video,
@@ -159,7 +165,9 @@ Player_Event,
 Binge_Details,
 Binge_Type,
 Video_Start_Type,
-device_name,
+case when lower(device_name) like "%xfinity%" then "xfinity" --- combine xfinity x1 and xfinity flex
+when lower(device_name) like "%google%tv%" then "android tv" --- combine google tv and android tv
+else lower(device_name) end as device_name,
 Lag(Display_Name) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video, --if finish an epsiode before 00:00 AM and then watch another one after 00:00 Am, will be "Manual" 
 Lag(video_id) over (partition by adobe_tracking_id,adobe_date order by adobe_timestamp) as Feeder_Video_Id,
 Display_Name,
@@ -195,7 +203,7 @@ Player_Event,
 Binge_Details,
 Binge_Type,
 Video_Start_Type,
-lower(device_name) as device_name, -- make sure the device names are consistent
+device_name, 
 Feeder_Video, 
 Feeder_Video_Id,
 Display_Name,
@@ -211,7 +219,7 @@ Player_Event,
 Binge_Details,
 Binge_Type,
 Video_Start_Type,
-lower(device_name) as device_name,
+device_name,
 regexp_replace(lower(Feeder_Video), r"[:,.&'!]", '') as Feeder_Video,
 Feeder_Video_Id,
 regexp_replace(lower(Display_Name), r"[:,.&'!]", '') as Display_Name,
@@ -302,7 +310,7 @@ Binge_Details,
 Binge_Type,
 Last_Actions,
 Video_Start_Type,
-device_name,
+device_name as Device_Name, -- keep the name format consistent
 Feeder_Video,
 Feeder_Video_Id,
 Display_Name,
@@ -312,7 +320,4 @@ grp, -- for test
 Episode_Time, -- for test
 New_Watch_Time_01+New_Watch_Time_02 as Final_Watch_Time 
 from cte4
-union all
-select *
-from `nbcu-ds-sandbox-a-001.Shunchao_Sandbox_Final.Auto_Binge_Metadata_Prod` 
 order by 1,2,9,3 -- order by ID, Date, Device, and then timestamp
